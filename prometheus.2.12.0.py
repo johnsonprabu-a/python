@@ -1,3 +1,5 @@
+#!/usr/bin/env python3.6
+
 import os
 import subprocess
 import urllib.request
@@ -8,11 +10,29 @@ import sys
 import pwd
 import grp
 
-#Requirements:
-#python= above 3.6 "sudo add-apt-repository ppa:deadsnakes/ppa" "sudo apt update" "sudo apt install python3.6"
-#pip3 "apt install python3-pip"
-#"apt-get install python3-apt"
-#
+'''
+Basic Requirements:
+
+# Python & pip3.6 required.
+
+sudo add-apt-repository ppa:jonathonf/python-3.6
+apt-get update
+apt-get install python3.6
+
+# If it says 'wget' module not found even if we installed 'pip3 install wget'
+
+wget https://bootstrap.pypa.io/get-pip.py
+sudo python3.6 get-pip.py
+pip3.6 install wget
+
+# If it says 'apt_pkg.so' module not found
+
+sudo cp /usr/lib/python3/dist-packages/apt_pkg.cpython-34m-i386-linux-gnu.so /usr/lib/python3/dist-packages/apt_pkg.so
+
+# There is a bug in this code, as you need to run it twice.
+
+'''
+
 Target_URL = 'https://github.com/prometheus/prometheus/releases/download/v2.12.0/prometheus-2.12.0.linux-amd64.tar.gz'
 SHA256SUM = 'b9f57b6e64fb3048742cfa7dbcc727e1df906d8020ef246a5e81b7959ae97e08'
 Source_dir = '/opt/'
@@ -50,7 +70,7 @@ def Extract_Tarball():
     if Dest_file.endswith('tar.gz'):
         extr_file = tarfile.open(Dest_file, "r:gz")
         extr_file.extractall(Dest_dir)
-        extr_file.close()
+        #extr_file.close()
         print("Tarball extracted")
     else:
         print("File is not downloaded in tar.gz mode")
@@ -58,11 +78,12 @@ def Extract_Tarball():
 
 
 def add_prometheus_user():
-    if not pwd.getpwnam('prometheus'):
+    try:
+        pwd.getpwnam('prometheus')
+        print('Prometheus user is already existing')
+    except KeyError:
         print("Adding Prometheus user")
         os.system("useradd --no-create-home --shell /bin/false prometheus")
-    else:
-        print("Prometheus user already exists")
 
 
 def setting_file_permission():
@@ -71,6 +92,8 @@ def setting_file_permission():
     # Moving respective files to It's directory
     os.chdir(Dest_efile)
     print(os.getcwd())
+    if not os.path.exists(Lib_dir):
+        os.system("mkdir -p /var/lib/prometheus/")
     if not os.path.exists('/etc/prometheus/consoles'):
         os.system("cp -rv consoles /etc/prometheus")
     if not os.path.exists('/etc/prometheus/consoles_libraries'):
@@ -86,6 +109,7 @@ def setting_file_permission():
         subprocess.run(['chown', 'prometheus:prometheus', '/usr/local/bin/promtool'])
     # Setting FILE PERMISSION
     subprocess.run(['chown', '-R', 'prometheus:prometheus', '/etc/prometheus/'])
+    os.system("chown prometheus:prometheus /var/lib/prometheus/")
 
 
 def setting_service_file():
@@ -96,6 +120,7 @@ def setting_service_file():
         f.write(service_list[i])
         f.write('\n')
     f.close()
+    os.system("systemctl daemon-reload")
 
 
 def service_check(service):
@@ -124,8 +149,7 @@ if os.getuid() is 0:
 
             add_prometheus_user()
 
-            if pwd.getpwnam('prometheus'):
-                setting_file_permission()
+            setting_file_permission()
 
             if not os.path.isfile(service_file):
                 setting_service_file()
@@ -134,18 +158,12 @@ if os.getuid() is 0:
 
             # Starting the service
 
+            subprocess.run(["systemctl", "start", "prometheus"])
+            subprocess.run(["systemctl", "enable", "prometheus"])
             sstatus = service_check("prometheus")
-            if sstatus is not 'inactive':
-                print("Prometheus service is already running")
-            else:
-                subprocess.run(["systemctl" "start", "prometheus"])
-                s_status = service_check("prometheus")
-                if s_status is 'active':
-                    print("Enabling service")
-                    subprocess.run(["systemctl" "enable", "prometheus"])
-                else:
-                    print("There is some issue on the service level. Please check......!")
+            print(sstatus)
         else:
             print("Source Hash is wrong, please verify")
 else:
     print("Run this program as Root User")
+
